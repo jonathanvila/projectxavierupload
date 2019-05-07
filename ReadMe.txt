@@ -1,15 +1,4 @@
-Camel Java8 Router Project
-==========================
+Upload some ZIP files to a Camel rest endpoint, unzip them and process each one individually
 
-To build this project use
-
-    mvn install
-
-To run this project from within Maven use
-
-    mvn exec:java
-
-For more help see the Apache Camel documentation
-
-    http://camel.apache.org/
+Postman project : /src/main/resources/ProjectXavier.postman_collection.json
 
