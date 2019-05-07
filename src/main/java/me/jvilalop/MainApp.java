@@ -1,4 +1,4 @@
-package com.redhat.jvilalop;
+package me.jvilalop;
 
 import org.apache.camel.main.Main;
 

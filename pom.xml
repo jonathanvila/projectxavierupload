@@ -128,7 +128,7 @@
         <artifactId>exec-maven-plugin</artifactId>
         <version>1.6.0</version>
         <configuration>
-          <mainClass>com.redhat.jvilalop.MainApp</mainClass>
+          <mainClass>me.jvilalop.MainApp</mainClass>
           <includePluginDependencies>false</includePluginDependencies>
         </configuration>
       </plugin>
