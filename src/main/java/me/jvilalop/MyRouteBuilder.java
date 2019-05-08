@@ -2,6 +2,7 @@ package me.jvilalop;
 
 import org.apache.camel.Attachment;
 import org.apache.camel.Exchange;
+import org.apache.camel.Predicate;
 import org.apache.camel.Processor;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.dataformat.zipfile.ZipSplitter;
@@ -16,7 +17,7 @@ import javax.activation.DataHandler;
 public class MyRouteBuilder extends RouteBuilder {
 
     public void configure() {
-        getContext().setTracing(true);
+        getContext().setTracing(false);
 
         restConfiguration().component("servlet").contextPath("/");
 
@@ -24,39 +25,42 @@ public class MyRouteBuilder extends RouteBuilder {
                 .post("/upload")
                     .id("uploadAction")
                     .consumes("multipart/form-data")
-                    .to("direct:unzipFile_customized")
+                    .produces("")
+                    .to("direct:upload")
                 .get("/health")
                     .to("direct:health");
 
-        from("direct:unzipFile")
-                .unmarshal()
-                .mimeMultipart()
-                .split()
-                .attachments()
-                .process(processMultipart())
-                .log("Processing ZIP ------> [${header.CamelFileName}] // [${header.part_type}] // [${header.part_name}] // [${header.part_value}]")
-                .split(new ZipSplitter())
-                .log("File processed : ${header.CamelFileName}")
-                .transform().simple("simple: out");
-
-        from("direct:unzipFile_customized")
+        from("direct:upload")
                 .unmarshal(new CustomizedMultipartDataFormat())
                 .split()
-                .attachments()
-                .process(processMultipart())
-                .log("Processing ZIP------> [${header.CamelFileName}] // [${header.part_type}] // [${header.part_name}] // [${header.part_value}]")
-                .split(new ZipSplitter())
-                .log("File processed : ${header.CamelFileName}")
-                .transform().simple("simple: out");
+                    .attachments()
+                    .process(processMultipart())
+                    .log("Processing PART ------> ${date:now:HH:mm:ss.SSS} [${header.CamelFileName}] // [${header.part_contenttype}] // [${header.part_name}]]")
+                    .choice()
+                        .when(isZippedFile())
+                            .split(new ZipSplitter())
+                            .streaming()
+                            .log(".....ZIP File processed : ${header.CamelFileName}")
+                            .to("direct:store")
+                        .endChoice()
+                        .otherwise()
+                            .to("direct:store");
+        
+        from("direct:store")
+                .convertBodyTo(String.class)
+                .to("file:./upload");
+    }
+
+    private Predicate isZippedFile() {
+        return exchange -> "application/zip".equalsIgnoreCase(exchange.getMessage().getHeader("part_contenttype").toString());
     }
 
     private Processor processMultipart() {
         return exchange -> {
             DataHandler dataHandler = exchange.getIn().getBody(Attachment.class).getDataHandler();
             exchange.getIn().setHeader(Exchange.FILE_NAME, dataHandler.getName());
-            exchange.getIn().setHeader("part_type", dataHandler.getContentType());
+            exchange.getIn().setHeader("part_contenttype", dataHandler.getContentType());
             exchange.getIn().setHeader("part_name", dataHandler.getName());
-            exchange.getIn().setHeader("part_value", (!dataHandler.getContentType().equals("application/zip")) ? dataHandler.getContent() : "XXX FILE XXX");
             exchange.getIn().setBody(dataHandler.getInputStream());
         };
     }
