@@ -1,24 +1,16 @@
 package me.jvilalop;
 
-import com.sun.mail.iap.ByteArray;
-import org.apache.camel.Attachment;
-import org.apache.camel.Exchange;
-import org.apache.camel.Predicate;
-import org.apache.camel.Processor;
+import org.apache.camel.*;
 import org.apache.camel.builder.RouteBuilder;
+import org.apache.camel.component.kafka.KafkaConstants;
 import org.apache.camel.dataformat.zipfile.ZipSplitter;
 import org.apache.http.entity.ContentType;
 import org.apache.http.entity.mime.HttpMultipartMode;
 import org.apache.http.entity.mime.MultipartEntityBuilder;
 import org.apache.http.entity.mime.content.ByteArrayBody;
-import org.apache.http.entity.mime.content.FileBody;
-import org.apache.http.entity.mime.content.InputStreamBody;
 import org.springframework.stereotype.Component;
 
 import javax.activation.DataHandler;
-import java.io.File;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.util.UUID;
 
 /**
@@ -82,10 +74,31 @@ public class MyRouteBuilder extends RouteBuilder {
         .log("respuesta ${body}")
         .end();
         
-        /*
-        from("kafka:platform.upload.testareno")
-                .log("message received");
-         */
+        //platform.upload.testareno
+        from("kafka:localhost:29092?topic=platform.upload.testareno&autoOffsetReset=earliest&consumersCount=1&brokers=localhost:29092")
+                .process(exchange -> {
+                    String messageKey = "";
+                    if (exchange.getIn() != null) {
+                        Message message = exchange.getIn();
+                        Integer partitionId = (Integer) message.getHeader(KafkaConstants.PARTITION);
+                        String topicName = (String) message.getHeader(KafkaConstants.TOPIC);
+                        if (message.getHeader(KafkaConstants.KEY) != null)
+                            messageKey = (String) message.getHeader(KafkaConstants.KEY);
+                        Object data = message.getBody();
+
+                        System.out.println("topicName :: "
+                                + topicName + " partitionId :: "
+                                + partitionId + " messageKey :: "
+                                + messageKey + " message :: "
+                                + data + "\n");
+                    }
+                }).to("direct:amq");
+
+
+        from("direct:amq")
+                .unmarshal(new ReportModelDataFormat())
+                .unmarshal().json()
+                .to("mock:amq_endpoint");
     }
 
     private String getRHInsightsRequestId() {

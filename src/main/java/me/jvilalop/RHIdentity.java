@@ -17,6 +17,6 @@ public class RHIdentity {
 
     private String getJSON() {
         // '{"identity": {"account_number": "12345", "internal": {"org_id": "54321"}}}'
-        return String.format("{ \"identity\": {\"account_number\": \"%s\", \"internal\":{\"org_id\":\"%s\"}}", accountNumber, internalOrgId);
+        return String.format("{\"identity\": {\"account_number\": \"%s\", \"internal\": {\"org_id\": \"%s\"}}}", accountNumber, internalOrgId);
     }
 }
