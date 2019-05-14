@@ -1,4 +1,4 @@
-package me.jvilalop;
+package me.jvilalop.model;
 
 import lombok.Builder;
 import lombok.Data;
@@ -8,6 +8,6 @@ import lombok.Data;
 public class InputDataModel {
     String customerId;
     String filename;
-    Integer numberOfHosts;
-    Integer totalDiskSpace;
+    Long numberOfHosts;
+    Long totalDiskSpace;
 }

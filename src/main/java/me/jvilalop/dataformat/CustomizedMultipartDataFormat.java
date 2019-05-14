@@ -1,4 +1,4 @@
-package me.jvilalop;
+package me.jvilalop.dataformat;
 
 import org.apache.camel.Exchange;
 import org.apache.camel.Message;

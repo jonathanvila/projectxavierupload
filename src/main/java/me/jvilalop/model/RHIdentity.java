@@ -1,4 +1,4 @@
-package me.jvilalop;
+package me.jvilalop.model;
 
 import lombok.Builder;
 import lombok.Data;

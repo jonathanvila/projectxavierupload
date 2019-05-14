@@ -1,9 +1,16 @@
 package me.jvilalop;
 
+import me.jvilalop.model.InputDataModel;
+import me.jvilalop.model.RHIdentity;
+import me.jvilalop.model.cloudforms.CloudFormAnalysis;
+import me.jvilalop.model.notification.FilePersistedNotification;
+import me.jvilalop.dataformat.CustomizedMultipartDataFormat;
+import me.jvilalop.dataformat.ReportModelDataFormat;
 import org.apache.camel.*;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.kafka.KafkaConstants;
 import org.apache.camel.dataformat.zipfile.ZipSplitter;
+import org.apache.camel.model.dataformat.JsonLibrary;
 import org.apache.http.entity.ContentType;
 import org.apache.http.entity.mime.HttpMultipartMode;
 import org.apache.http.entity.mime.MultipartEntityBuilder;
@@ -13,11 +20,13 @@ import org.springframework.stereotype.Component;
 import javax.activation.DataHandler;
 import java.util.UUID;
 
+import static org.apache.camel.builder.SimpleBuilder.simple;
+
 /**
  * A Camel Java8 DSL Router
  */
 @Component
-public class MyRouteBuilder extends RouteBuilder {
+public class MainRouteBuilder extends RouteBuilder {
 
     public void configure() {
         getContext().setTracing(true);
@@ -71,11 +80,10 @@ public class MyRouteBuilder extends RouteBuilder {
                 .setHeader("x-rh-identity", constant(getRHIdentity()))
                 .setHeader("x-rh-insights-request-id", constant(getRHInsightsRequestId()))
                 .to("http4://localhost:8080/api/ingress/v1/upload")
-        .log("respuesta ${body}")
+        .log("answer ${body}")
         .end();
         
-        //platform.upload.testareno
-        from("kafka:localhost:29092?topic=platform.upload.testareno&autoOffsetReset=earliest&consumersCount=1&brokers=localhost:29092")
+        from("kafka:kafka:29092?topic=platform.upload.testareno&autoOffsetReset=earliest&consumersCount=1&brokers=kafka:29092")
                 .process(exchange -> {
                     String messageKey = "";
                     if (exchange.getIn() != null) {
@@ -86,18 +94,48 @@ public class MyRouteBuilder extends RouteBuilder {
                             messageKey = (String) message.getHeader(KafkaConstants.KEY);
                         Object data = message.getBody();
 
-                        System.out.println("topicName :: "
-                                + topicName + " partitionId :: "
-                                + partitionId + " messageKey :: "
-                                + messageKey + " message :: "
-                                + data + "\n");
+                        System.out.println("topicName :: " + topicName + 
+                                " partitionId :: " + partitionId + 
+                                " messageKey :: " + messageKey + 
+                                " message :: "+ data + "\n");
                     }
-                }).to("direct:amq");
+                })
+                .unmarshal().json(JsonLibrary.Jackson, FilePersistedNotification.class)
+                .to("direct:download-from-S3");
+        
 
-
-        from("direct:amq")
-                .unmarshal(new ReportModelDataFormat())
-                .unmarshal().json()
+        from("direct:download-from-S3")
+                .setHeader("remote_url", simple("http4://${body.url.replaceAll('http://', '')}"))
+                .setBody(constant(""))
+                .recipientList(simple("${header.remote_url}"))
+                .convertBodyTo(String.class)
+                .log("Contenido : ${body}")
+                .to("direct:parse");
+        
+        from("direct:parse")
+                .unmarshal().json(JsonLibrary.Jackson, CloudFormAnalysis.class)
+                .process(exchange -> {
+                    int numberofhosts = exchange.getIn().getBody(CloudFormAnalysis.class).getDatacenters()
+                            .stream()
+                            .flatMap(e -> e.getEmsClusters().stream())
+                            .mapToInt(t -> t.getHosts().size())
+                            .sum();
+                    long totalspace = exchange.getIn().getBody(CloudFormAnalysis.class).getDatacenters()
+                            .stream()
+                            .flatMap(e-> e.getDatastores().stream())
+                            .mapToLong(t -> t.getTotalSpace())
+                            .sum();
+                    exchange.getMessage().setHeader("numberofhosts",String.valueOf(numberofhosts));
+                    exchange.getMessage().setHeader("totaldiskspace", String.valueOf(totalspace));
+                })
+                .log("Before second unmarshal : ${body}")
+                .process(exchange -> exchange.getMessage().setBody(InputDataModel.builder().customerId("CID9876") //exchange.getMessage().getHeader("customerid").toString())
+                                                                    .filename(simple("${CamelFileName}").getText())
+                                                                    .numberOfHosts(Long.parseLong(exchange.getMessage().getHeader("numberofhosts").toString()))
+                                                                    .totalDiskSpace(Long.parseLong(exchange.getMessage().getHeader("totaldiskspace").toString()))
+                                                                    .build()))
+                .log("Before third unmarshal : ${body}")
+                .marshal().json()
                 .to("mock:amq_endpoint");
     }
 
